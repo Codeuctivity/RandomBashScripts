@@ -1,0 +1,36 @@
+﻿<advancedsettings>
+<fullscreen>true</fullscreen>
+<moviestacking action="prepend">
+<!--http://kodi.wiki/view/Advancedsettings.xml#moviestacking
+Cusotm Stakcing for Mediafiles from open7x0 / vdr 1.4 e.g.: 001.vdr, 002.vdr, ...
+If only one mediafile is recorded (001.vdr) the nfo file name need to be "001.nfo" and placed in the same directory as the mediafile
+If multiple mediafile are recorded (001.vdr, 002.vdr) the nfo file name need to be "00.nfo" and placed in the same direcotry as the mediafile-->
+<regexp>([0-9][0-9])([0-9])()(.vdr)</regexp>
+<!--<regexp>(.*?)([ .*?]*[0-9])(.*?)(\.[^.]+)$</regexp>-->
+</moviestacking>
+
+<video>
+<!-- Exceptions for metafiles written by open7x0 / vdr-->
+  <excludefromscan>
+    <regexp>index.vdr</regexp>
+    <regexp>info.vdr</regexp>
+    <regexp>marks.vdr</regexp>
+    <regexp>resume.vdr</regexp>
+  </excludefromscan>
+  <excludefromlisting> <!-- Regular expressions that if evaluated to true won't be displayed in Files View -->
+    <regexp>index.vdr</regexp>
+    <regexp>info.vdr</regexp>
+    <regexp>marks.vdr</regexp>
+    <regexp>resume.vdr</regexp>
+  </excludefromlisting>
+  <excludetvshowsfromscan>
+    <regexp>index.vdr</regexp>
+    <regexp>info.vdr</regexp>
+    <regexp>marks.vdr</regexp>
+    <regexp>resume.vdr</regexp>
+  </excludetvshowsfromscan>
+</video>
+<videolibrary>
+<cleanonupdate>true</cleanonupdate>
+ </videolibrary>
+</advancedsettings>
