@@ -27,11 +27,13 @@ fi
 
 if [ "$1" = "-new" ];then
   echo "regenerating all nfo files ..."
-	find $VDRREC -name "*.nfo" -exec rm {} \;
+  find $VDRREC -name "*.nfo" -exec rm {} \;
+  find $VDRREC -name "tmp.xml" -exec rm {} \;
 elif [ "$1" = "-newall" ];then
   echo "regenerating all files ..."
   find $VDRREC -name "*.jpg" -exec rm {} \;
   find $VDRREC -name "*.nfo" -exec rm {} \;
+  find $VDRREC -name "tmp.xml" -exec rm {} \;
 elif [ -n "$1" ];then
   echo "  Usage:"
   echo "  $0"
@@ -47,10 +49,22 @@ for i in $(find $VDRREC -name "info.*" -type f)
 do
   VDRDIR=$(dirname $i)
   VDRINFO=$(basename $i)
-  DVDTHUMBABSOLUTEPATH=${VDRDIR}/${DVDTHUMB}
   cd $VDRDIR
+  #nfo file name must be 00.nfo for stacking
+  if [ -f "002.vdr" ];then
+    NFOFILE="00.nfo"
+    if [ -f "001.nfo" ];then
+       rm 001.nfo
+    fi
+  else
+    NFOFILE="001.nfo"
+    if [ -f "00.nfo" ];then
+       rm 00.nfo
+    fi
+  fi
+  if [ ! -f $NFOFILE ];then
 
-   #use  "iconv -f ISO-8859-1 -t UTF-8 <file>"  to convert encoding (open7x0 uses ISO-8859-1 in my old version), you can use "cat" instead on your utf8 system
+  #use  "iconv -f ISO-8859-1 -t UTF-8 <file>"  to convert encoding (open7x0 uses ISO-8859-1 in my old version), you can use "cat" instead on your utf8 system
 
   if [ -f $VDRINFO ];then
      AIRED=$(basename $VDRDIR | awk -F'.' '{print $1}')
@@ -60,6 +74,16 @@ do
      KURZTEXT=$(iconv -f ISO-8859-1 -t UTF-8 $VDRINFO | grep "^S " | sed "s/^S //")
      if [ -z "$KURZTEXT" ];then
           KURZTEXT="$TITEL"
+     fi
+     TIMERINFO=$(iconv -f ISO-8859-1 -t UTF-8 info.vdr | grep "^@ " | sed "s/^@ //")
+     #echo $TIMERINFO
+     if [ ! -z "$TIMERINFO" ];then
+       echo $TIMERINFO > tmp.xml
+       #echo "cat /epgsearch/channel/text()" | xmllint --nocdata --shell tmp.xml | grep " - "
+       CHANNEL=$(echo 'cat /epgsearch/channel/text()' | xmllint --nocdata --shell tmp.xml | grep -oP '(\d+) - ([A-Z\d\s\w])+' | sed 's/^\([0-9]\+\) - //')
+echo "cat /epgsearch/searchtimer/text()" | xmllint --nocdata --shell tmp.xml | tail -n 2 | head -1
+       SEARCHTIMER=$(xmllint --xpath  "//epgsearch/searchtimer/text()" tmp.xml) 
+       rm tmp.xml
      fi
   fi
 
@@ -78,31 +102,21 @@ do
 	$DAUER min: $INHALT"
   fi
 
-  #nfo file name must be 00.nfo for stacking
-  if [ -f "002.vdr" ];then
-    NFOFILE="00.nfo"
-    if [ -f "001.nfo" ];then
-       echo "001.nfo entfernt und durch 00.nfo ersetzt"
-       rm 001.nfo
-    fi
-  else
-    NFOFILE="001.nfo"
-    if [ -f "00.nfo" ];then
-	echo "00.nfo entfernt und durch 001.nfo ersetzt"  
-	rm 00.nfo
-    fi
-
-  fi
-
-  #00.nfo oder 001.nfo ersetllen
-  if [ ! -f $NFOFILE ];then
      echo "creating database infos ..."
      echo "<episodedetails>"                     		> $NFOFILE
      echo "<title>$KURZTEXT</title>" 				>> $NFOFILE
      echo "<plot>$DAUER min: $INHALT</plot>"    		>> $NFOFILE
-   if [ -z "$IMDBID" ];then
-     echo "<thumb>$DVDTHUMBABSOLUTEPATH</thumb>"		>> $NFOFILE
-   fi   
+   if [ ! -z "$CHANNEL" ];then
+     echo "<tag>Channel $CHANNEL</tag>"    		>> $NFOFILE
+     echo "<credits>$CHANNEL</credits>"    	>> $NFOFILE
+   else
+     echo "<credits>VDR</credits>"              >> $NFOFILE
+   fi
+  if [ ! -z "$SEARCHTIMER" ];then
+     echo "<tag>Suchtimer $SEARCHTIMER</tag>"    		>> $NFOFILE    
+   fi
+     echo "<thumb>$DVDTHUMB</thumb>"		>> $NFOFILE
+      
      echo "<rating></rating>"                   		>> $NFOFILE
      echo "<season></season>"                   		>> $NFOFILE
      echo "<episode></episode>"                 		>> $NFOFILE
@@ -117,20 +131,21 @@ do
   #tvshow.nfo erstellen
   if [ ! -f $TVFILE ];then
      	echo "New tvshow !"
-	IMDBID=$(curl -G 'http://thetvdb.com/index.php' --data-urlencode "seriesname=${TITEL}" --data-urlencode 'fieldlocation=2' --data-urlencode 'language=14' --data-urlencode 'genre=' --data-urlencode 'year=' --data-urlencode 'network=' --data-urlencode 'zap2it_id=' --data-urlencode 'tvcom_id=' --data-urlencode 'imdb_id=' --data-urlencode 'order=translation' --data-urlencode 'addedBy=' --data-urlencode 'searching=Search' --data-urlencode 'tab=advancedsearch' | tidy -quiet -asxml -numeric -utf8 -file /dev/null | grep tab=series  | grep -oP "id=\d+" | head -1)
+	IMDBID=$(curl -G 'http://www.thetvdb.com/index.php' --data-urlencode "seriesname=${TITEL}" --data-urlencode 'fieldlocation=2' --data-urlencode 'language=14' --data-urlencode 'genre=' --data-urlencode 'year=' --data-urlencode 'network=' --data-urlencode 'zap2it_id=' --data-urlencode 'tvcom_id=' --data-urlencode 'imdb_id=' --data-urlencode 'order=translation' --data-urlencode 'addedBy=' --data-urlencode 'searching=Search' --data-urlencode 'tab=advancedsearch' | tidy -quiet -asxml -numeric -utf8 -file /dev/null | grep tab=series  | grep -oP "id=\d+" | head -1)
 	echo "<tvshow>"								> $TVFILE
     	echo "<title>$TITEL</title>" 						>> $TVFILE
     	echo "<showtitle>$TITEL</showtitle>" 					>> $TVFILE
 	echo "</tvshow>"							>> $TVFILE
    if [ ! -z "$IMDBID" ];then
-	echo "Found TVShow in online db http://thetvdb.com/index.php?tab=series&$IMDBID"     
-	echo "http://thetvdb.com/index.php?tab=series&$IMDBID"	>> $TVFILE
+	echo "Found TVShow in online db http://www.thetvdb.com/index.php?tab=series&$IMDBID"     
+	echo "http://www.thetvdb.com/?tab=series&id=$IMDBID&lid=14"	>> $TVFILE
    fi
-  else
-     	echo "tvshow already exists!"
+  #else
+     	#echo "tvshow already exists!"
   fi
-  #gets biggest file of directory
-  VIDEOFILE=`ls --sort=size | head -1`
+  #gets biggest video file of directory
+ if [ -f "001.vdr" ] ;then
+  VIDEOFILE=`ls 0*.vdr --sort=size | head -1`
  if [ -z "$IMDBID" ];then
   if [ -f $VDR2JPEG ] && [ "$IMGUSE" = "VDR2JPEG" ] && [ "$VDRINFO" = "info.vdr" ] && [ -f "info.vdr" ] && [ -f "index.vdr" ];then
 
@@ -141,7 +156,7 @@ do
      fi
   elif [ -f $VLC ];then
      if [ ! -f $DVDTHUMB ];then
-       echo "creating DVD thumbnails vlc ..."
+       echo "creating DVD thumbnails vlc for $VDRDIR"
        #$VLC --video-filter scene -V dummy --scene-width=$DVD_YRES --scene-format=jpeg --scene-replace --scene-ratio 24 --start-time=60 --stop-time=61 --scene-path=$VDRDIR $VIDEOFILE vlc://quit
        $VLC --no-audio --video-filter scene -V dummy --scene-width=$DVD_YRES --scene-format=jpeg --scene-replace --scene-ratio 24 --start-time=$DVDOFFSETSEC --run-time 1 --scene-path=$VDRDIR $VIDEOFILE vlc://quit  
        mv  scene.jpeg $DVDTHUMB
@@ -173,11 +188,10 @@ do
        $FFMPEG -i $VIDEOFILE -itsoffset $DVDOFFSETSEC -s ${DVD_XRES}x${DVD_YRES} -f image2 -vframes 1 -y temp.jpg
        mv temp.jpg $DVDTHUMB
      fi
-
+   fi
   fi
  fi
 	if [ -f "tidy-errors.txt" ];then
 	  rm tidy-errors.txt
      	fi
-  echo "---"
 done

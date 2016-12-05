@@ -27,11 +27,13 @@ fi
 
 if [ "$1" = "-new" ];then
   echo "regenerating all nfo files ..."
-	find $VDRREC -name "*.nfo" -exec rm {} \;
+  find $VDRREC -name "*.nfo" -exec rm {} \;
+  find $VDRREC -name "tmp.xml" -exec rm {} \;
 elif [ "$1" = "-newall" ];then
   echo "regenerating all files ..."
   find $VDRREC -name "*.jpg" -exec rm {} \;
   find $VDRREC -name "*.nfo" -exec rm {} \;
+  find $VDRREC -name "tmp.xml" -exec rm {} \;
 elif [ -n "$1" ];then
   echo "  Usage:"
   echo "  $0"
@@ -45,10 +47,23 @@ fi
 
 for i in $(find $VDRREC -name "info.*" -type f)
 do
+  #echo $i
   VDRDIR=$(dirname $i)
   VDRINFO=$(basename $i)
-  DVDTHUMBABSOLUTEPATH=${VDRDIR}/${DVDTHUMB}
-  cd $VDRDIR
+  cd "$VDRDIR"
+  #nfo file name must be 00.nfo for stacking
+  if [ -f "002.vdr" ];then
+    NFOFILE="00.nfo"
+    if [ -f "001.nfo" ];then
+       rm 001.nfo
+    fi
+  else
+    NFOFILE="001.nfo"
+    if [ -f "00.nfo" ];then
+       rm 00.nfo
+    fi
+  fi
+  if [ ! -f $NFOFILE ];then
 
   #use  "iconv -f ISO-8859-1 -t UTF-8 <file>"  to convert encoding (open7x0 uses ISO-8859-1 in my old version), you can use "cat" instead on your utf8 system
 
@@ -60,6 +75,16 @@ do
      KURZTEXT=$(iconv -f ISO-8859-1 -t UTF-8 $VDRINFO | grep "^S " | sed "s/^S //")
      if [ -z "$KURZTEXT" ];then
           KURZTEXT="$TITEL"
+     fi
+     TIMERINFO=$(iconv -f ISO-8859-1 -t UTF-8 info.vdr | grep "^@ " | sed "s/^@ //")
+     #echo $TIMERINFO
+     if [ ! -z "$TIMERINFO" ];then
+       echo $TIMERINFO > tmp.xml
+       #echo "cat /epgsearch/channel/text()" | xmllint --nocdata --shell tmp.xml | grep " - "
+       CHANNEL=$(echo 'cat /epgsearch/channel/text()' | xmllint --nocdata --shell tmp.xml | grep -oP '(\d+) - ([A-Z\d\s\w])+' | sed 's/^\([0-9]\+\) - //')
+       echo "cat /epgsearch/searchtimer/text()" | xmllint --nocdata --shell tmp.xml | tail -n 2 | head -1
+       SEARCHTIMER=$(xmllint --xpath  "//epgsearch/searchtimer/text()" tmp.xml) 
+       rm tmp.xml
      fi
   fi
 
@@ -78,65 +103,57 @@ do
 	$DAUER min: $INHALT"
   fi
 
-  #nfo file name must be 00.nfo for stacking
-  if [ -f "002.vdr" ];then
-    NFOFILE="00.nfo"
-    if [ -f "001.nfo" ];then
-       rm 001.nfo
-    fi
-  else
-    NFOFILE="001.nfo"
-    if [ -f "00.nfo" ];then
-       rm 00.nfo
-    fi
-
-  fi
-  if [ ! -f $NFOFILE ];then
      echo "creating database infos ..."
      #IMDBID=$(curl -G 'http://www.imdb.com/find' --data-urlencode "q=${TITEL}" --data-urlencode "s=tt" --data-urlencode "exact=true" | tidy -quiet -asxml -numeric -utf8 -file /dev/null | grep /title/ | grep -oP "tt\d{7}" | head -1)
-	IMDBID=$(curl -G 'http://www.imdb.com/find' --data-urlencode "q=${TITEL}" --data-urlencode "s=tt" | tidy -quiet -asxml -numeric -utf8 -file /dev/null | grep /title/ | grep -oP "tt\d{7}" | head -1)
+     IMDBID=$(curl -G 'http://www.imdb.com/find' --data-urlencode "q=${TITEL}" --data-urlencode "s=tt" | tidy -quiet -asxml -numeric -utf8 -file /dev/null | grep /title/ | grep -oP "tt\d{7}" | head -1)
      echo "<movie>"                     			> $NFOFILE
      echo "<title>$TITEL</title>"            			>> $NFOFILE
      echo "<plot>$DAUER min: $INHALT</plot>"    		>> $NFOFILE
    if [ -z "$IMDBID" ];then
-     echo "<thumb>$DVDTHUMBABSOLUTEPATH</thumb>"		>> $NFOFILE
+     echo "<thumb>$DVDTHUMB</thumb>"		>> $NFOFILE
+     echo "<tag>Not found in IMDB</tag>"			>> $NFOFILE
      echo "$TITEL not found on IMDB.com ($VDRDIR)"
      echo "$TITEL not found on IMDB.com ($VDRDIR)" >> $NOTFOUNDINIMDBLIST
      #curl -G 'http://www.imdb.com/find' --data-urlencode "q=${TITEL}" --data-urlencode "s=tt" | tidy -quiet -asxml -numeric -utf8 -file /dev/null >> $NOTFOUNDINIMDBLIST
+   fi
+   if [ ! -z "$CHANNEL" ];then
+     echo "<tag>Channel $CHANNEL</tag>"    		>> $NFOFILE
+     echo "<credits>$CHANNEL</credits>"    	>> $NFOFILE
+   else
+     echo "<credits>VDR</credits>"              >> $NFOFILE
    fi   
-  echo "<credits>VDR</credits>"              		>> $NFOFILE
+   if [ ! -z "$SEARCHTIMER" ];then
+     echo "<tag>Suchtimer $SEARCHTIMER</tag>"    		>> $NFOFILE    
+   fi   
      echo "<director></director>"               >> $NFOFILE
      echo "<aired>$AIRED</aired>"               >> $NFOFILE
      echo "<runtime>$DAUER min</runtime>"       >> $NFOFILE
      echo "<actor></actor>"                     >> $NFOFILE
      echo "</movie>"                  		>> $NFOFILE
-   if [ ! -z "$IMDBID" ];then
-     echo "http://www.imdb.com/title/$IMDBID/"	>> $NFOFILE
-     if [ -f "thumb.jpg" ];then
-       rm thumb.jpg
+     if [ ! -z "$IMDBID" ];then
+      echo "http://www.imdb.com/title/$IMDBID/"	>> $NFOFILE
+      if [ -f $DVDTHUMB ];then
+        rm $DVDTHUMB
+      fi
      fi
-   fi
-  fi
-
   #gets biggest file of directory
-  VIDEOFILE=`ls --sort=size | head -1`
- if [ -z "$IMDBID" ];then
-  if [ -f $VDR2JPEG ] && [ "$IMGUSE" = "VDR2JPEG" ] && [ "$VDRINFO" = "info.vdr" ] && [ -f "info.vdr" ] && [ -f "index.vdr" ];then
-
+   VIDEOFILE=`ls --sort=size | head -1`
+   if [ -z "$IMDBID" ];then
+    if [ -f $VDR2JPEG ] && [ "$IMGUSE" = "VDR2JPEG" ] && [ "$VDRINFO" = "info.vdr" ] && [ -f "info.vdr" ] && [ -f "index.vdr" ];then
      if [ ! -f $DVDTHUMB ];then
        echo "creating DVD thumbnails vdr2jpeg ..."
        $VDR2JPEG -x $DVD_XRES= -y $DVD_YRES -f $DVDOFFSETVDR -r .
        mv 000${DVDOFFSETVDR}.jpg $DVDTHUMB
      fi
-  elif [ -f $VLC ];then
+    elif [ -f $VLC ];then
      if [ ! -f $DVDTHUMB ];then
        echo "creating DVD thumbnails vlc in $VDRDIR..."
        $VLC --no-audio --video-filter scene -V dummy --scene-width=$DVD_YRES --scene-format=jpeg --scene-replace --scene-ratio 24 --start-time=$DVDOFFSETSEC --run-time 1 --scene-path=$VDRDIR $VIDEOFILE vlc://quit  
-       if [ -f scene.jpeg ];then       
+       if [ -f scene.jpeg ];then
 	mv  scene.jpeg $DVDTHUMB
        fi
      fi
-  elif [ -f $MPLAYER ];then
+    elif [ -f $MPLAYER ];then
      if [ ! -f $DVDTHUMB ];then
        echo "creating DVD thumbnails mplayer ..."
        $MPLAYER -msglevel all=-1 -nosound -vo jpeg -frames 1 -sb $DVDOFFSETVDR $VIDEOFILE
@@ -154,18 +171,16 @@ do
 	mv 00000001.jpg $DVDTHUMB
        fi
      fi
-
-  elif [ -f $FFMPEG ];then
-
+    elif [ -f $FFMPEG ];then
      if [ ! -f $DVDTHUMB ];then
        echo "creating DVD thumbnails ffmpeg / avconv ..."
        $FFMPEG -i $VIDEOFILE -itsoffset $DVDOFFSETSEC -s ${DVD_XRES}x${DVD_YRES} -f image2 -vframes 1 -y temp.jpg
        mv temp.jpg $DVDTHUMB
      fi
-  fi
+   fi
  fi
-	if [ -f "tidy-errors.txt" ];then
+fi
+if [ -f "tidy-errors.txt" ];then
 	  rm tidy-errors.txt
-     	fi
-  echo "---"
+fi
 done
