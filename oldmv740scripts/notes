@@ -1,0 +1,8 @@
+konvertiert alles im verzeichnis ins mkv - matroska format.
+
+	ffmpeg -fflags    hilft gegen fehlermeldungen "first pts value must set" or "Can't write packet with unknown timestamp" die bei aufnahmen mit schlechtem empfang aufgenommen wurden
+
+	-map 0     lässt alle audiostreams kopieren, default wäre dass ffmpeg sich einen aussucht
+
+ for f in *.ts ; do ffmpeg -fflags +genpts -i "$f" -c copy -map 0 -f matroska "${f%.ts}.mkv" | tee convert.log && echo "$f" >> good.log || echo "$f" >> bad.log ; done
+
